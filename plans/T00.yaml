@@ -1,0 +1,15 @@
+# plans/T00.yaml
+task_id: "T00"
+intent: "Grundstruktur & Werkzeug finalisieren: Alle erforderlichen Ordner/Dateien vorhanden, Dependencies installiert, ruff und mypy laufen ohne Fehler"
+files:
+- path: "swarm_moi/__init__.py"
+  regions: ["AI_EDIT"]
+- path: "pyproject.toml"
+  regions: ["AI_EDIT"]
+tests_expected:
+- "tests/test_repo_structure.py::test_required_directories_exist"
+- "tests/test_repo_structure.py::test_package_init_exists_and_imports"
+- "tests/test_repo_structure.py::test_dependency_manifest_present"
+risk: "niedrig"
+rollback_hint: "git revert <commit>"
+notes: "Behebt ruff/mypy Fehler und stellt sicher dass alle Tools korrekt funktionieren"

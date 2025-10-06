@@ -1,0 +1,34 @@
+[project]
+name = "hivegovernor"
+version = "0.0.1"
+description = "Swarm-MoE/MOI Monitor & Governor (skeleton)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "HiveGovernor"}]
+dependencies = [
+  # Runtime deps (keep minimal for now)
+  "torch; platform_system != 'Windows' or python_version >= '3.10'",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["swarm_moi"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_subclassing_any = false
+ignore_missing_imports = true  # until types are in place
+

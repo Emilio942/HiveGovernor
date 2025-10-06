@@ -1,0 +1,7 @@
+pytest
+pytest-cov
+ruff
+mypy
+diff-cover
+mutmut
+

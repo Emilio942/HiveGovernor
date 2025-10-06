@@ -1,0 +1,11 @@
+# plans/T22.yaml
+task_id: "T22"
+intent: "End-to-End-Ping-Pong-Break test: Synthese-Setup mit inputs die abwechselnd i↔j triggern und erwarten dass nach ≤L Schritten Ping-Pong verschwindet durch Inhibition"
+files:
+- path: "tests/test_governor_breaks_pingpong.py"
+  regions: ["AI_EDIT"]
+tests_expected:
+- "tests/test_governor_breaks_pingpong.py::test_governor_breaks_ping_pong_pattern"
+risk: "niedrig"
+rollback_hint: "git revert <commit>"
+notes: "Nutzt Router, Monitor und Governor zusammen um zu zeigen dass Ping-Pong Muster erkannt und unterbrochen werden"

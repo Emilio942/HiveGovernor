@@ -1,0 +1,13 @@
+# plans/T30.yaml
+task_id: "T30"
+intent: "Clustering-Funktion implementieren: cluster_from_C(C) -> labels mit einfachen Methoden (spektral oder schwellwert-basiert) ohne schwere Bibliotheken"
+files:
+- path: "swarm_moi/clustering.py"
+  regions: ["AI_EDIT"]
+tests_expected:
+- "tests/test_clustering_simple.py::test_clustering_clear_blocks"
+- "tests/test_clustering_simple.py::test_clustering_single_cluster"
+- "tests/test_clustering_simple.py::test_clustering_isolated_experts"
+risk: "niedrig"
+rollback_hint: "git revert <commit>"
+notes: "Nutzt nur torch für spektrales Clustering oder Schwellwert-basierte Methoden, keine externen ML-Bibliotheken"

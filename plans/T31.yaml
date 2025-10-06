@@ -1,0 +1,13 @@
+# plans/T31.yaml
+task_id: "T31"
+intent: "Kurzreporter implementieren: build_report(C, loop_pairs, labels) -> Dict mit Top-Gruppen, Top-Loop-Paare und Inhibitions-History-Stub"
+files:
+- path: "swarm_moi/reporter.py"
+  regions: ["AI_EDIT"]
+tests_expected:
+- "tests/test_reporter_schema.py::test_reporter_schema_keys"
+- "tests/test_reporter_schema.py::test_reporter_values_reasonable"
+- "tests/test_reporter_schema.py::test_reporter_empty_inputs"
+risk: "niedrig"
+rollback_hint: "git revert <commit>"
+notes: "Erstellt strukturierte Reports für Top-Gruppen, Loop-Paare und Inhibition-History ohne externe Dependencies"
