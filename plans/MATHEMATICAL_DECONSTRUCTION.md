@@ -29,5 +29,14 @@ Let $E(X) = -\sum X \log X$ be the global entropy.
 $$\frac{\partial E(\Pi_{\mathcal{DS}}(M \odot I))}{\partial I} = 0$$
 The control signal $I$ lies entirely within the **null-space** of the manifold constraint $\Pi_{\mathcal{DS}}$.
 
-$$\implies \text{Dynamic Inhibition} \perp \text{Pruning}$$
-$$\implies \text{Efficiency}(\text{Inhibition}) \ll \text{Efficiency}(\text{Topology Reduction})$$
+## 4. Final Audit: Spectral Inflation (The Lollipop Artifact)
+The observed $+10.49\%$ robustness gain in the `bottleneck_score` must be interpreted with caution. 
+
+**Spectral vs. Topological Expansion:**
+While the Fiedler value $\lambda_2(L)$ increased, the Sinkhorn projection $\Pi_{\mathcal{DS}}$ may have artificially inflated the spectral gap without necessarily improving the topological Cheeger Constant $h(G)$. This is known as the **Lollipop Artifact**: a single 'shortcut' edge created by the normalization can boost $\lambda_2$ (mixing speed) while leaving the primary communication bottleneck (topology) intact.
+
+**Effective Weight Significance:**
+Despite potential inflation, the use of $\lambda=0.04$ against a $10\times$ bias pressure is mathematically significant. The effective penalty $\lambda_{eff} = \lambda \cdot \alpha^2 = 4.0$ ensures that the inhibition signal $\Psi$ is no longer a 'Ghost Governor' but a physically active force in the logit space.
+
+**Conclusion:**
+The transition from multiplicative inhibition to **Integrated Additive Optimization** successfully moved the system from a provable null-space to a measurable (though potentially non-linear) control regime. Future research should distinguish between spectral mixing and topological expansion to fully validate the structural gain.
