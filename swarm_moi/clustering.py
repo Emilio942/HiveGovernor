@@ -30,58 +30,70 @@ def cluster_from_C(
 
 
 def _spectral_clustering(C: torch.Tensor) -> torch.Tensor:
-    """Simple spectral clustering using eigenvectors of the normalized Laplacian."""
+    """
+    Spectral clustering using the Eigengap heuristic to determine k automatically.
+    Uses the symmetrically normalized Laplacian.
+    """
     n = C.size(0)
-    
     if n <= 1:
         return torch.zeros(n, dtype=torch.long)
     
-    # Create adjacency matrix from co-activation (use absolute values)
+    # Adjacency matrix (absolute co-activations, no self-loops)
     A = torch.abs(C)
+    A.fill_diagonal_(0)
     
-    # Remove self-loops for cleaner clustering
-    A = A - torch.diag(torch.diag(A))
-    
-    # Compute degree matrix
+    # Degree matrix
     d = A.sum(dim=1)
-    
-    # Handle disconnected components
-    isolated = (d == 0)
-    if isolated.all():
-        # All nodes are isolated
+    if (d == 0).all():
         return torch.arange(n, dtype=torch.long)
     
-    # For connected components, add small epsilon to avoid numerical issues
-    d = torch.clamp(d, min=1e-6)
-    D_sqrt_inv = torch.diag(1.0 / torch.sqrt(d))
+    # Symmetrically Normalized Laplacian: L = I - D^-1/2 A D^-1/2
+    d_inv_sqrt = torch.pow(d.clamp(min=1e-6), -0.5)
+    D_inv_sqrt = torch.diag(d_inv_sqrt)
+    L_norm = torch.eye(n, device=C.device, dtype=C.dtype) - D_inv_sqrt @ A @ D_inv_sqrt
     
-    # Normalized Laplacian: L = I - D^(-1/2) * A * D^(-1/2)
-    L_norm = torch.eye(n, device=C.device, dtype=C.dtype) - D_sqrt_inv @ A @ D_sqrt_inv
-    
-    # Compute eigenvalues and eigenvectors
+    # Eigen-decomposition
     try:
         eigenvals, eigenvecs = torch.linalg.eigh(L_norm)
     except RuntimeError:
-        # Fallback to threshold clustering if spectral fails
-        return _threshold_clustering(C, threshold=0.5)
-    
-    # Use the Fiedler vector (second smallest eigenvalue) for binary clustering
-    if n < 2:
         return torch.zeros(n, dtype=torch.long)
     
-    fiedler_vec = eigenvecs[:, 1]  # eigenvalues are sorted in ascending order
-    
-    # Simple threshold-based assignment using sign or median
-    # Use sign if the vector has both positive and negative values
-    labels: torch.Tensor
-    if (fiedler_vec > 0).any() and (fiedler_vec < 0).any():
-        labels = (fiedler_vec >= 0).long()
+    # Eigengap Heuristic: Find max gap between consecutive eigenvalues
+    # Skip the first (always 0) and look for the gap that separates clusters
+    if n > 2:
+        gaps = eigenvals[1:] - eigenvals[:-1]
+        # Look for the maximum gap in the first half of spectrum (most stable k)
+        max_gap_idx = torch.argmax(gaps[1:n//2 + 1])
+        k = max_gap_idx + 2 
     else:
-        # Use median split if all values have same sign
-        median_val = torch.median(fiedler_vec).values
-        labels = (fiedler_vec >= median_val).long()
+        k = 2
+
+    # Use the first k eigenvectors for clustering
+    # We use a simple k-means proxy: sign patterns of the first k-1 non-trivial vectors
+    selected_vecs = eigenvecs[:, 1:int(k)]
     
+    if int(k) == 2:
+        # Binary split using the Fiedler vector
+        fiedler = eigenvecs[:, 1]
+        # Use sign if it clearly separates, otherwise median
+        if (fiedler > 0).any() and (fiedler < 0).any():
+            labels = (fiedler >= 0).long()
+        else:
+            labels = (fiedler >= torch.median(fiedler)).long()
+    else:
+        # For k > 2, create a bit-mask from signs to separate groups
+        # This is a robust way to turn eigenvector signs into cluster IDs
+        bits = (selected_vecs > 0).long()
+        powers = torch.pow(2, torch.arange(bits.size(1), device=C.device))
+        labels = (bits * powers).sum(dim=1)
+        # Re-map to 0..k-1 range
+        unique_labels = torch.unique(labels)
+        for i, val in enumerate(unique_labels):
+            labels[labels == val] = i
+        
     return labels
+
+
 
 
 def _threshold_clustering(C: torch.Tensor, threshold: float) -> torch.Tensor:
