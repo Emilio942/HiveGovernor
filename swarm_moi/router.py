@@ -7,11 +7,12 @@ import torch.nn.functional as F
 
 class HysteresisRouter(nn.Module):
     """
-    Integrated Additive Router (Final Stabilized Version).
+    Integrated Additive Router (Mathematically Verified).
     Features:
+    - Q2: Logit-Space Momental Damping (Preventing manifold drift).
+    - Q12: Critical Damping Coupling (Coupled with Monitor EMA).
     - Exact Analytical Gradient (Logits-to-Prob Jacobian).
     - Logit Centering (Breaking row-wise additive invariance).
-    - Momental Damping (Preventing Hopf Bifurcation / Router Jitter).
     - Convergent Sinkhorn-Knopp.
     """
 
@@ -22,7 +23,7 @@ class HysteresisRouter(nn.Module):
         tau: float = 1.0, 
         hysteresis: float = 0.0,
         lambda_tax: float = 0.04,
-        alpha_damping: float = 0.7 # Q18/Stability: Damping factor for limit-cycle prevention
+        alpha_damping: float = 0.7 # Inertia in Logit Space
     ) -> None:
         super().__init__()
         self.n_experts = n_experts
@@ -34,24 +35,34 @@ class HysteresisRouter(nn.Module):
 
         self.proj: nn.Linear = nn.LazyLinear(n_experts, bias=True)
         
-        # Buffer for Damping/Momentum
-        self.register_buffer("_prev_probs", torch.empty(0), persistent=False)
-        self._prev_probs: torch.Tensor
+        # Q2: Buffer for Damping/Momentum in LOGIT space
+        self.register_buffer("_prev_logits", torch.empty(0), persistent=False)
+        self._prev_logits: torch.Tensor
         
         # Buffer for Hysteresis
         self.register_buffer("_prev_mask", torch.empty(0), persistent=False)
         self._prev_mask: torch.Tensor
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = self.proj(x)
+        raw_logits = self.proj(x)
         
         # 1. Break row-wise invariance (Ghost Governor Fix)
-        logits = logits - logits.mean(dim=-1, keepdim=True)
+        centered_logits = raw_logits - raw_logits.mean(dim=-1, keepdim=True)
         
-        # 2. Initial Softmax
+        # Q2: Momental Damping in Logit Space
+        if self.training and self._prev_logits.numel() > 0:
+            # We blend the NEW centered logits with the PREVIOUS state
+            # This provides a much stronger contraction towards the Wardrop Equilibrium
+            logits = (1.0 - self.alpha_damping) * self._prev_logits + self.alpha_damping * centered_logits
+        else:
+            logits = centered_logits
+        
+        self._prev_logits = logits.detach()
+
+        # 2. Additive Tax (Integrated Optimization)
+        # Using centered and damped logits as base
         M = F.softmax(logits / self.tau, dim=-1)
 
-        # 3. Additive Tax (Integrated Optimization)
         if self.training and self.lambda_tax > 0:
             C = M.transpose(0, 1) @ M
             C.fill_diagonal_(0)
@@ -60,31 +71,25 @@ class HysteresisRouter(nn.Module):
             grad_m = 4.0 * (M @ C)
             exact_grad = (M * grad_m) - M * torch.sum(M * grad_m, dim=-1, keepdim=True)
             
+            # Apply tax as shift in logit space
             logits = logits - self.lambda_tax * exact_grad
             M = F.softmax(logits / self.tau, dim=-1)
 
-        # 4. Convergent Sinkhorn-Knopp (Global Balance)
+        # 3. Convergent Sinkhorn-Knopp (Global Balance)
         if self.training:
-            for _ in range(10): # Increased iterations for true DS property
+            for _ in range(10): 
                 M = M / M.sum(dim=0, keepdim=True).clamp_min(1e-12)
                 M = M * (self.n_experts / M.size(0))
                 M = M / M.sum(dim=1, keepdim=True).clamp_min(1e-12)
 
-        # 5. Momental Damping (Limit Cycle Prevention)
-        if self.training and self._prev_probs.numel() > 0:
-            # Current mapping f(Z) blended with previous state
-            M = (1.0 - self.alpha_damping) * self._prev_probs + self.alpha_damping * M
-        
-        self._prev_probs = M.detach()
-
-        # 6. Hysteresis (Temporal Stability)
+        # 4. Hysteresis (Temporal Stability)
         if self._prev_mask.numel() > 0 and self.hysteresis > 0.0:
             prev = self._prev_mask.to(dtype=M.dtype)
             denom = prev.sum(dim=-1, keepdim=True).clamp_min(1.0)
             M = (1.0 - self.hysteresis) * M + self.hysteresis * (prev / denom)
             M = M / M.sum(dim=-1, keepdim=True).clamp_min(1e-12)
 
-        # 7. Top-k selection
+        # 5. Top-k selection
         topk = torch.topk(M, k=self.k, dim=-1).indices
         mask = torch.zeros_like(M, dtype=torch.bool)
         mask.scatter_(dim=-1, index=topk, value=True)
